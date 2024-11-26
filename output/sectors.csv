@@ -1,0 +1,9 @@
+sector_id,sector_name
+1,agriculture
+2,buildings
+3,fluorinated_gases
+4,fossil_fuel_operations
+5,manufacturing
+6,mineral_extraction
+7,power
+8,waste
