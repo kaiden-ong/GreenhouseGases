@@ -72,3 +72,109 @@ WITH CountryRanks AS (
 SELECT *
 FROM CountryRanks
 ORDER BY emissions_rank;
+
+--VALUE Window Query
+
+/*
+This query is great for seeing the trends of carbon emissions in each country based on gas.
+All the end times are shown (end of each year) and the amount of emissions correlating to 
+that set of country, gas, and year. Then we have the latest years emission value and a column
+comparing each year to the latest year.
+
+Intepretation:
+We can see for ABW (Aruba), ch4 emissions are increasing, however co2 emissions are decreasing.
+Additionally, n20 is decreasing, and ch4 for afg is also increasing. There are thousands of columns
+but each is easy to understand.
+
+Implications:
+This is very helpful to see the trends and possibly predict future increases or changes. Based on these 
+results policy makers and help limit the increase in certain countries with certain gases, and aid in those
+that are already descreasing.
+*/
+
+WITH EmissionTimeData AS (
+    SELECT 
+        c.iso_country_code AS country,
+        g.gas_name AS gas,
+        et.end_time,
+        SUM(ISNULL(e.quantity, 0)) AS total_emissions
+    FROM emissions e
+    JOIN dim_countries c ON e.country_id = c.country_id
+    JOIN dim_gases g ON e.gas_id = g.gas_id
+    JOIN dim_end_times et ON e.end_time_id = et.end_time_id
+    GROUP BY c.iso_country_code, g.gas_name, et.end_time
+)
+SELECT 
+    country,
+    gas,
+    total_emissions,
+    end_time,
+    LAST_VALUE(total_emissions) OVER (
+        PARTITION BY country, gas 
+        ORDER BY end_time 
+        ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING
+    ) AS last_emission_value,
+	CASE 
+        WHEN total_emissions > 
+            LAST_VALUE(total_emissions) OVER (
+                PARTITION BY country, gas 
+                ORDER BY end_time 
+                ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING
+            ) THEN 'More'
+        WHEN total_emissions < 
+            LAST_VALUE(total_emissions) OVER (
+                PARTITION BY country, gas 
+                ORDER BY end_time 
+                ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING
+            ) THEN 'Less'
+        ELSE 'Latest'
+    END AS comparison_to_latest
+FROM EmissionTimeData
+WHERE total_emissions > 0
+ORDER BY country, gas, end_time;
+
+--Time series analytic query
+/*
+This query looks at the two years before and calculates a 3 year moving average for each country
+and sector. For example, for ABW and agriculture in 2017, it would take 2015 + 2016 + 2017 totals
+and divide by 3 to find the moving average.
+
+Interpretation:
+Taking a look at ABW again, we can see that for buildings and fossil fuels, the moving average 
+is generally increasing, however, manufacturing emissions are going down. These are easy to see 
+as the results are ordered by country and sector so you can see how the quanity of emissions in 
+each sector changes each year.
+
+Implications:
+This moving average is very helpful as it let's us understand trends for each sector. As a policy
+maker for any of these countries this is important information as we can see which sectors are producing
+the most emissions and which ones are continuing to rise.
+
+
+*/
+
+WITH AverageEmissions AS (
+    SELECT 
+        c.iso_country_code AS country,
+        s.sector_name AS sector,
+        YEAR(st.start_time) AS period,
+        SUM(ISNULL(e.quantity, 0)) AS total_emissions,
+        AVG(SUM(ISNULL(e.quantity, 0))) 
+            OVER (PARTITION BY c.iso_country_code, s.sector_name
+                  ORDER BY YEAR(st.start_time)
+                  ROWS BETWEEN 2 PRECEDING AND CURRENT ROW) AS moving_avg_3_years
+    FROM emissions e
+    JOIN dim_countries c ON e.country_id = c.country_id
+    JOIN dim_sectors s ON e.sector_id = s.sector_id
+    JOIN dim_start_times st ON e.start_time_id = st.start_time_id
+    GROUP BY c.iso_country_code, s.sector_name, YEAR(st.start_time)
+)
+SELECT 
+    country,
+    sector,
+    period,
+    total_emissions,
+    moving_avg_3_years
+FROM AverageEmissions
+ORDER BY country, sector, period;
+
