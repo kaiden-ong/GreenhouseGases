@@ -178,3 +178,171 @@ SELECT
 FROM AverageEmissions
 ORDER BY country, sector, period;
 
+--Daniel's Queries
+--Query with CUBE:
+/*This query allows us to look at the time dimension of greenhouse gases and how they have evolved over time. 
+The query aggregates emissions data using the CUBE operator, providing a comprehensive summary of emissions across the dimensions: start time, sector, and gas.
+The CUBE function generates totals for all combinations of these dimensions, as well as overall totals across each dimension individually and combined.
+
+Interpretation
+The results provide insights into emissions grouped by time periods (start_time_id), sector (sector_name), and gas (gas_name). For example, in one row where start_date is 2021,
+sector is 'agriculture', and gas is 'CO2', the total emissions are calculated as 279569928.87575805 tonnes. In another row where the sector and start_date are the same and all
+gases are included, 19656478684.733253 tons were calculated. 
+
+Implications
+The results enable policymakers to identify high-emission periods, sectors, or gases and target these areas for intervention. 
+For example, if emissions from the "Energy" sector during start_time_id = 2021 show a significant spike, it could signal the need for stricter 
+regulations or policies in that sector. Additionally, the overall totals provide a comprehensive view of emissions, helping track progress toward global emission reduction goals.
+*/
+
+WITH TimeSectorCube AS (
+    SELECT 
+        COALESCE(CAST(dst.start_time AS NVARCHAR), 'ALL') AS start_date, -- Use dates for grouping
+        COALESCE(s.sector_name, 'ALL') AS sector,
+        COALESCE(g.gas_name, 'ALL') AS gas,
+        SUM(ISNULL(e.quantity, 0)) AS total_emissions,
+        COUNT(e.emission_id) AS entries_count
+    FROM emissions e
+    JOIN dim_start_times dst ON e.start_time_id = dst.start_time_id
+    JOIN dim_sectors s ON e.sector_id = s.sector_id
+    JOIN dim_gases g ON e.gas_id = g.gas_id
+    GROUP BY CUBE (dst.start_time, s.sector_name, g.gas_name)
+)
+SELECT 
+    start_date,
+    sector,
+    gas,
+    total_emissions,
+    entries_count
+FROM TimeSectorCube
+ORDER BY start_date, sector, gas;
+
+/*
+This query ranks sectors by their total emissions for each gas type using the RANK() window function. 
+The query partitions the emissions data by gas_name, ensuring each gas type has its own ranking of sectors based on their contribution. 
+The total emissions for each sector and gas combination are calculated using SUM, and the RANK() function assigns a rank to each sector within its gas category.
+
+Interpretation
+The results show which sectors contribute the most emissions for each specific gas. For example, the fossil_fuel_operations sector is ranked 1st for Ch4 emissions 
+with 1014838435.6569908 tonnes, while Agriculture ranks 2nd for Methane with 1001224381.5754291 tonnes. 
+This breakdown provides gas-specific sectoral insights, enabling targeted interventions.
+
+Implications
+This analysis helps policymakers focus on the most impactful sectors for each gas.
+By identifying the top contributors for each gas type, policymakers can design sector-specific strategies to reduce emissions effectively.
+*/
+
+WITH SectorRankings AS (
+    SELECT 
+        s.sector_name AS sector,
+        g.gas_name AS gas,
+        SUM(ISNULL(e.quantity, 0)) AS total_emissions,
+        RANK() OVER (PARTITION BY g.gas_name ORDER BY SUM(ISNULL(e.quantity, 0)) DESC) AS rank
+    FROM emissions e
+    JOIN dim_sectors s ON e.sector_id = s.sector_id
+    JOIN dim_gases g ON e.gas_id = g.gas_id
+    GROUP BY s.sector_name, g.gas_name
+)
+SELECT 
+    rank,
+    sector,
+    gas,
+    total_emissions
+FROM SectorRankings
+ORDER BY gas, rank;
+
+--query 3
+/*
+This query calculates the cumulative emissions by sector and their respective percentage contributions to the global total. 
+It uses window functions to compute cumulative totals and percentages for emissions across all sectors, ordered by descending total emissions. 
+The query also calculates the overall total emissions across all sectors.
+
+The SectorEmissions calculates the total emissions for each sector by summing the quantity of emissions.
+The CumulativeEmissions computes:
+global_total_emissions: The total emissions across all sectors.
+cumulative_emissions: The running total of emissions as sectors are ranked in descending order by emissions.
+Interpretation
+The results display emissions for each sector, their cumulative totals, and the cumulative percentage of the global total. For example:
+The power sector contributes 28.69% of the global total emissions, followed by fossil_fuel_operations which raises the cumulative percentage to 50.58%. 
+This provides a clear picture of how emissions are distributed among sectors.
+The cumulative_percentage column helps identify key contributors to global emissions. Sectors at the top of the list are responsible for the largest shares of emissions.
+
+Implications
+This analysis allows policymakers to:
+Identify sectors that are the largest contributors to emissions and prioritize them for interventions.
+Focus efforts on reducing emissions in sectors with the highest cumulative percentages to achieve the greatest impact.
+Use cumulative percentages to assess the relative importance of each sector in global emissions reduction strategies.
+*/
+
+WITH SectorEmissions AS (
+    SELECT 
+        s.sector_name AS sector,
+        SUM(ISNULL(e.quantity, 0)) AS total_emissions
+    FROM emissions e
+    JOIN dim_sectors s ON e.sector_id = s.sector_id
+    GROUP BY s.sector_name
+),
+CumulativeEmissions AS (
+    SELECT 
+        sector,
+        total_emissions,
+        SUM(total_emissions) OVER () AS global_total_emissions,
+        SUM(total_emissions) OVER (ORDER BY total_emissions DESC ROWS UNBOUNDED PRECEDING) AS cumulative_emissions
+    FROM SectorEmissions
+)
+SELECT 
+    sector,
+    total_emissions,
+    cumulative_emissions,
+    cumulative_emissions * 1.0 / (SELECT MAX(global_total_emissions) FROM CumulativeEmissions) AS cumulative_percentage
+FROM CumulativeEmissions
+ORDER BY total_emissions DESC;
+
+/*
+
+This query calculates a 5-year moving average of emissions for each country and sector. The moving average smooths out fluctuations 
+by considering the current year and the emissions from the four preceding years. This allows for a broader view of trends in emissions over time.
+
+The query aggregates emissions data by country, sector, and end_time, then uses the AVG() window function with the ROWS BETWEEN 4 PRECEDING 
+AND CURRENT ROW clause to compute the moving average for each group.
+
+Interpretation
+The results show the total emissions for each country and sector in a given year alongside their 5-year moving average. For example:
+
+For the fossil_fuel_operations sector in AGO, the moving average for 2021 reflects emissions from 2017 to 2021.
+This helps identify whether emissions in a given year are consistent with long-term trends or represent a significant deviation.
+The longer window of 5 years reduces noise caused by short-term anomalies, making it easier to observe broader patterns.
+
+Implications
+Trend Identification:
+This moving average highlights stable trends and smooths out year-over-year fluctuations, enabling policymakers to focus on long-term changes in emissions.
+By identifying sectors with steadily increasing emissions, targeted policies can be developed to curb growth in those areas.
+Conversely, sectors with decreasing emissions can serve as models for successful interventions.
+Resources can be directed toward sectors with the most significant long-term increases in emissions, as identified by deviations from the moving average.
+*/
+
+
+WITH CountrySectorEmissions AS (
+    SELECT 
+        c.iso_country_code AS country,
+        s.sector_name AS sector,
+        et.end_time AS period,
+        SUM(ISNULL(e.quantity, 0)) AS total_emissions
+    FROM emissions e
+    JOIN dim_countries c ON e.country_id = c.country_id
+    JOIN dim_sectors s ON e.sector_id = s.sector_id
+    JOIN dim_end_times et ON e.end_time_id = et.end_time_id
+    GROUP BY c.iso_country_code, s.sector_name, et.end_time
+)
+SELECT 
+    country,
+    sector,
+    period,
+    total_emissions,
+    AVG(total_emissions) OVER (
+        PARTITION BY country, sector 
+        ORDER BY period 
+        ROWS BETWEEN 4 PRECEDING AND CURRENT ROW
+    ) AS moving_average
+FROM CountrySectorEmissions
+ORDER BY country, sector, period;
