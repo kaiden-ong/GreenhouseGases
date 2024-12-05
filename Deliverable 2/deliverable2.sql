@@ -66,7 +66,7 @@ DROP TABLE dim_subsectors
 DROP TABLE emissions
 
 BULK INSERT dim_countries
-FROM 'C:\Users\mrpi3\OneDrive\Documents\UW Files\UW Fall 2024\INFO 430\GreenhouseGases\output\countries.csv'
+FROM '/countries.csv'
 WITH
 (
 	FIRSTROW = 2,
@@ -76,7 +76,7 @@ WITH
 )
 
 BULK INSERT dim_start_times
-FROM 'C:\Users\mrpi3\OneDrive\Documents\UW Files\UW Fall 2024\INFO 430\GreenhouseGases\output\starts.csv'
+FROM '/starts.csv'
 WITH
 (
 	FIRSTROW = 2,
@@ -86,7 +86,7 @@ WITH
 )
 
 BULK INSERT dim_end_times
-FROM 'C:\Users\mrpi3\OneDrive\Documents\UW Files\UW Fall 2024\INFO 430\GreenhouseGases\output\ends.csv'
+FROM '/ends.csv'
 WITH
 (
 	FIRSTROW = 2,
@@ -96,7 +96,7 @@ WITH
 )
 
 BULK INSERT dim_gases
-FROM 'C:\Users\mrpi3\OneDrive\Documents\UW Files\UW Fall 2024\INFO 430\GreenhouseGases\output\gases.csv'
+FROM '/gases.csv'
 WITH
 (
 	FIRSTROW = 2,
@@ -106,7 +106,7 @@ WITH
 )
 
 BULK INSERT dim_sectors
-FROM 'C:\Users\mrpi3\OneDrive\Documents\UW Files\UW Fall 2024\INFO 430\GreenhouseGases\output\sectors.csv'
+FROM '/sectors.csv'
 WITH
 (
 	FIRSTROW = 2,
@@ -116,7 +116,7 @@ WITH
 )
 
 BULK INSERT dim_subsectors
-FROM 'C:\Users\mrpi3\OneDrive\Documents\UW Files\UW Fall 2024\INFO 430\GreenhouseGases\output\subsectors.csv'
+FROM '/subsectors.csv'
 WITH
 (
 	FIRSTROW = 2,
@@ -126,7 +126,7 @@ WITH
 )
 
 BULK INSERT emissions
-FROM 'C:\Users\mrpi3\OneDrive\Documents\UW Files\UW Fall 2024\INFO 430\GreenhouseGases\output\fact_table.csv'
+FROM '/fact_table_cleaned.csv'
 WITH
 (
 	FIRSTROW = 2,
